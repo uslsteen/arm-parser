@@ -1,30 +1,26 @@
 from pathlib import Path
 
 import glob
-import json
 import os
 import re
-import string
-import sys
 import xml.etree.cElementTree as ET
 from collections import defaultdict
-from itertools import takewhile
-
-from matplotlib import widgets
 
 ALL_XML, XML_REGULAR = str('*.xml'),\
                        str('.*/(\S+).xml')
 
 class Instruction:
-    def __init__(self, mn : str = str(), mask : str = str(), isa : str = str(), ps_name : str = str(),\
-                       encs : list = list(), cond_setting : str = str(), instr_class : str = str()):
-        self.mnemonic = mn
-        self.mask = mask
-        self.isa = isa
-        self.ps_name = ps_name
-        self.encs = encs
-        self.cond_setting = cond_setting
-        self.instr_class = instr_class
+    def __init__(self):
+        self.mnemonic = str()
+        self.ps_name = str()
+        #
+        self.mask = str()
+        self.isa = str()
+        #
+        self.cond_setting = str()
+        self.instr_class = str()
+        #
+        self.encs = list()
         self.fields = list()
         #
     #
@@ -61,7 +57,7 @@ class ArmParser():
 
         for iclass in xml.findall('.//classes/iclass'):
             instr_data = Instruction()
-            enc_mask = str()
+            mask = str()
             #
             docvars = iclass.find("docvars")
             for doc_var in docvars:
@@ -88,18 +84,24 @@ class ArmParser():
                         self.instr_fields[field_name] = make_fields_data(msb, lsb)
                 #
                 for b_it in box:
-                    enc_mask += str(b_it.text) if b_it.text != None else "x" * width
+                    mask += set_bits(b_it.text, width)
             
-
-            instr_data.mask = enc_mask
+            instr_data.mask = mask
             instr_data.fields = fields
             instr_data.ps_name = ps_name
 
             self.insts_list.append(instr_data)
             #
     #
-            
-           
+def set_bits(bit : str, width) -> bool:
+    if bit in ['1', '0']:
+        return bit
+    elif bit in ['(1)', '(0)', 'x']:
+        return 'x'
+    else:
+        return 'x' * width  
+        #
+    #      
 def ones(n) -> int:
     return (1 << n) - 1
     #
