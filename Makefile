@@ -9,6 +9,7 @@ A64 = ${XMLDIR}/ISA_v85A_A64_xml_${VERSION}
 
 TARFILES = ${A64_TAR}
 
+
 ${XMLDIR}:
 	mkdir -p ${XMLDIR}
 
@@ -27,10 +28,12 @@ endef
 ASLTARGETS=A64
 $(foreach T,$(ASLTARGETS), $(eval $(TARGET)))
 
-get_n_tar: ${A64}
+GET_DATA: ${A64}
 
-all: ${get_n_tar}
+parse:
 	python3 main.py
+
+all: GET_DATA parse
 
 clean:
 	rm -rf ${ASLDIR} ${PARSEDIR}
