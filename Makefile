@@ -1,14 +1,15 @@
 .PHONY: default clean force_clean
 default: all
 
-VERSION = 00bet9
+VERSION = A_profile-2022-09
 XMLDIR = xml
 
-A64_TAR=${XMLDIR}/A64_v85A_ISA_xml_${VERSION}.tar.gz
-A64 = ${XMLDIR}/ISA_v85A_A64_xml_${VERSION}
+A64_TAR=${XMLDIR}/ISA_A64_xml_${VERSION}.tar.gz
+A64 = ${XMLDIR}/ISA_A64_xml_${VERSION}
+
+# xml/ISA_A64_xml_A_profile-2022-09
 
 TARFILES = ${A64_TAR}
-
 
 ${XMLDIR}:
 	mkdir -p ${XMLDIR}
@@ -17,12 +18,12 @@ ${XMLDIR}:
 
 ${XMLDIR}/%.tar.gz: | ${XMLDIR}
 	cd ${XMLDIR} && \
-	wget https://developer.arm.com/-/media/developer/products/architecture/armv8-a-architecture/$(@F)
+	wget https://developer.arm.com/-/media/developer/products/architecture/armv9-a-architecture/2022-09/$(@F)
 
 define TARGET
 $($T): $($T_TAR)
 	cd ${XMLDIR} && \
-	tar zxf $$(<F) && tar zxf $$(@F).tar.gz
+	tar zxf $$(<F)
 endef
 
 ASLTARGETS=A64
@@ -31,7 +32,7 @@ $(foreach T,$(ASLTARGETS), $(eval $(TARGET)))
 GET_DATA: ${A64}
 
 parse:
-	python3 main.py
+	python3 main.py --directory ${A64} > collisions.out
 
 all: GET_DATA parse
 

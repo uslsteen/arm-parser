@@ -24,12 +24,17 @@ class Instruction:
         self.encs = list()
         self.fields = list()
         #
+        self.arch_vars = list()
     #
 
 # NOTE: 
 class ArmParser():
-    def __init__(self, path : Path):
+    def __init__(self, path : Path, arch : str(), version : str()):
+    #
         self.path = path
+        self.arch = arch
+        self.version = version
+        #
         self.xml_list = list()
         #
         self.instr_fields = dict()
@@ -51,25 +56,29 @@ class ArmParser():
     #
     def parse(self):
         for xml in self.xml_list:
-            self.read_data(xml)
+            self.parse_inst(xml)
         #
     #
-    def read_data(self, xml):
+    def parse_inst(self, xml):
         encs = list()
 
         for iclass in xml.findall('.//classes/iclass'):
             #
             instr_data = self.parse_instr_section(iclass)
+            instr_data.arch_vars = self.parse_arch_variant(iclass)
+
+            if len(instr_data.arch_vars) > 1:
+                print(instr_data.mnemonic)
 
             encoding = iclass.find('regdiagram')
-
+            
             instr_data.ps_name = deslash(encoding.attrib.get('psname'))
             instr_data.mask, instr_data.fields = self.parse_bits_section(encoding)
 
             if instr_data.mnemonic != str():
                 self.insts_list.append(instr_data)
             else:
-                print(instr_data.ps_name)
+                print(f"No mnemonic only {instr_data.ps_name}")
             
             encs.append(instr_data)
             #
@@ -108,7 +117,21 @@ class ArmParser():
                 mask += set_bits(b_it.text, width)
         
         return mask, fields
+        #
+    #
+    def parse_arch_variant(self, iclass):
+    #
+        found_arch_vars = list()
+        arch_vars = iclass.find("arch_variants")
+        #
+        if arch_vars != None:
+            for var in arch_vars:
+                name, feature = var.attrib.get('name'), var.attrib.get('feature')
+                found_arch_vars.append(dict({"name" : name, "feature" : feature}))
 
+        return found_arch_vars  
+        #   
+    #
 
 def set_bits(bit : str, width) -> bool:
     #
