@@ -3,6 +3,7 @@ from pathlib import Path
 import glob
 import os
 import re
+import csv
 import xml.etree.cElementTree as ET
 from collections import defaultdict
 
@@ -29,11 +30,11 @@ class Instruction:
 
 # NOTE: 
 class ArmParser():
-    def __init__(self, path : Path, arch : str(), version : str()):
+    def __init__(self, path : Path, args):
     #
         self.path = path
-        self.arch = arch
-        self.version = version
+        self.arch = args.arch
+        self.arch_vars = self.parse_extensions_csv(args.arch_vars)
         #
         self.xml_list = list()
         #
@@ -65,10 +66,10 @@ class ArmParser():
         for iclass in xml.findall('.//classes/iclass'):
             #
             instr_data = self.parse_instr_section(iclass)
+            #
             instr_data.arch_vars = self.parse_arch_variant(iclass)
-
-            if len(instr_data.arch_vars) > 1:
-                print(instr_data.mnemonic)
+            if instr_data.arch_vars not in self.arch_vars:
+                return
 
             encoding = iclass.find('regdiagram')
             
@@ -121,18 +122,33 @@ class ArmParser():
     #
     def parse_arch_variant(self, iclass):
     #
-        found_arch_vars = list()
+        cur_arch_var = dict()
         arch_vars = iclass.find("arch_variants")
         #
         if arch_vars != None:
-            for var in arch_vars:
-                name, feature = var.attrib.get('name'), var.attrib.get('feature')
-                found_arch_vars.append(dict({"name" : name, "feature" : feature}))
+            var = arch_vars[0]
+            name, feature = var.attrib.get('name'), var.attrib.get('feature')
+            cur_arch_var = dict({"name" : name, "feature" : feature})
 
-        return found_arch_vars  
+        return cur_arch_var  
         #   
     #
-
+    def parse_extensions_csv(self, path_to_csv : str):
+    #
+        features_list = list()
+        with open(path_to_csv, newline='') as csvfile:
+            spamreader = csv.reader(csvfile, delimiter = ' ')
+            for row in spamreader:
+                if len(row) == 2:
+                    features_list.append(dict({"name" : row[0], "feature" : row[1]}))
+                else:
+                    features_list.append(dict({"feature" : row[0]}))
+                #
+            #
+        return features_list
+        #
+    #
+#
 def set_bits(bit : str, width) -> bool:
     #
     if bit in ['1', '0']:

@@ -7,8 +7,6 @@ XMLDIR = xml
 A64_TAR=${XMLDIR}/ISA_A64_xml_${VERSION}.tar.gz
 A64 = ${XMLDIR}/ISA_A64_xml_${VERSION}
 
-# xml/ISA_A64_xml_A_profile-2022-09
-
 TARFILES = ${A64_TAR}
 
 ${XMLDIR}:
@@ -32,12 +30,9 @@ $(foreach T,$(ASLTARGETS), $(eval $(TARGET)))
 GET_DATA: ${A64}
 
 parse:
-	python3 main.py --directory ${A64} > collisions.out
+	python3 main.py --directory ${A64} --arch_vars $(abspath extensions.csv) > collisions.out
 
 all: GET_DATA parse
 
 clean:
-	rm -rf ${ASLDIR} ${PARSEDIR}
-
-force_clean: clean
 	rm -rf ${XMLDIR}

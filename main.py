@@ -8,14 +8,14 @@ def main():
     
     parser.add_argument('-dir', "--directory", type=str, help="Path to xml sources directory")
     parser.add_argument('--arch', type=str, default = ['A64'], help="Optional list of architecture")
-    parser.add_argument('-v', "--version", type=str, default=[], help="Minor version of ISA set")
+    parser.add_argument('--arch_vars', type=str, help="Path to file w/ legal ARM extensions")
     #
     args = parser.parse_args()
-
+    #
     exec_path = Path.resolve(Path(__file__)).parent
     src_path = exec_path.joinpath(args.directory)
     #
-    parser = ArmParser(Path(src_path), args.arch, args.arch, args.version)
+    parser = ArmParser(Path(src_path), args)
     parser.collect()
     parser.parse()
     #
