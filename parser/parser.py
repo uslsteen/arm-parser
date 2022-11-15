@@ -7,6 +7,8 @@ import csv
 import xml.etree.cElementTree as ET
 from collections import defaultdict
 
+from ruamel.yaml import YAML
+
 ALL_XML, XML_REGULAR = str('*.xml'),\
                        str('.*/(\S+).xml')
 
@@ -22,11 +24,27 @@ class Instruction:
         self.cond_setting = str()
         self.instr_class = str()
         #
-        self.encs = list()
         self.fields = list()
         #
         self.arch_vars = list()
     #
+    def __to_dict__(self):
+        fixed_mask = self.mask.replace('0', '1')
+        fixed_mask = fixed_mask.replace('x', '0')
+        fixed_mask = int(fixed_mask, 2)
+
+        fixed_value = self.mask.replace('x', '0')
+        fixed_value = int(fixed_value, 2)
+
+        return dict({                       \
+            "mn" : self.mnemonic,           \
+            "ps_name" : self.ps_name,       \
+            "mask" : self.mask,             \
+            "fixed_mask" : fixed_mask,     \
+            "fixed_value" : fixed_value,    \
+            "fields" : self.fields,         \
+            "attr" : 0                      \
+        })
 
 # NOTE: 
 class ArmParser():
@@ -39,7 +57,6 @@ class ArmParser():
         self.xml_list = list()
         #
         self.instr_fields = dict()
-        self.instructions = dict()
         self.insts_list = list()
         #
         self.not_impl_attr = set()
@@ -66,14 +83,15 @@ class ArmParser():
         for iclass in xml.findall('.//classes/iclass'):
             #
             instr_data = self.parse_instr_section(iclass)
-            #
             instr_data.arch_vars = self.parse_arch_variant(iclass)
+            
             if instr_data.arch_vars not in self.arch_vars:
-                return
+                print() # return
 
             encoding = iclass.find('regdiagram')
             
             instr_data.ps_name = deslash(encoding.attrib.get('psname'))
+            #
             instr_data.mask, instr_data.fields = self.parse_bits_section(encoding)
 
             if instr_data.mnemonic != str():
@@ -103,20 +121,31 @@ class ArmParser():
     def parse_bits_section(self, encoding):
     #   
         fields, mask = list(), str()
-
+        #
         for box in encoding.findall('box'):
+            illegal_vals = list()
             field_name = box.attrib.get('name')
             width, msb = int(box.attrib.get('width','1')), int(box.attrib['hibit'])
             lsb = msb - width + 1
             #
+            for b_it in box:
+                cur_bits, cond = get_bits(b_it.text, width)
+                
+                if cond == False:
+                    illegal_vals.append(cur_bits)
+                    mask += 'x' * width
+                else:
+                    mask += cur_bits
+            #
             if field_name != None:
-                fields.append(field_name)
+                if illegal_vals != list():
+                    fields.append(dict({"name" : field_name, "illegal_vals" : illegal_vals}))
+                else:
+                    fields.append(dict({"name" : field_name}))
+
                 if self.instr_fields.get(field_name) == None:
                     self.instr_fields[field_name] = make_fields_data(msb, lsb)
-            #
-            for b_it in box:
-                mask += set_bits(b_it.text, width)
-        
+
         return mask, fields
         #
     #
@@ -148,19 +177,40 @@ class ArmParser():
         return features_list
         #
     #
-#
-def set_bits(bit : str, width) -> bool:
+    def to_yaml(self, path : Path):
+        yaml = YAML()
+        yaml.indent = 4
+
+        aarch_data = dict()
+        aarch_data["fields"] = self.instr_fields
+        aarch_data["instructions"] = list_to_dict(self.insts_list)
+
+        with open(path, 'w+') as file:
+            yaml.dump(aarch_data, file)
+        #
     #
-    if bit in ['1', '0']:
-        return bit
-    elif bit == 'x':
-        return 'x'
-    elif bit == '(1)':
-        return '1'
-    elif bit == '(0)':
-        return '0'
+#
+def list_to_dict(list) -> dict:
+    cur_dict = dict()
+    #
+    for ind, it in enumerate(list):
+        cur_dict[ind] = it.__to_dict__()
+    #
+    return cur_dict
+
+#
+def get_bits(bit_data : str, width):
+    #
+    if bit_data in ['1', '0', 'x']:
+        return bit_data, True
+    elif bit_data == '(1)':
+        return '1', True
+    elif bit_data == '(0)':
+        return '0', True
+    elif bit_data != None and bit_data[0:2] == "!=":
+        return bit_data[3:], False
     else:
-        return 'x' * width  
+        return 'x' * width, True  
     #
 #      
 def ones(n) -> int:
@@ -178,3 +228,6 @@ def make_fields_data(msb, lsb) -> dict:
 #
 def deslash(name : str) -> str:
     return name.replace("/instrs","").replace("/", "_").replace("-","_")
+    #
+#
+        

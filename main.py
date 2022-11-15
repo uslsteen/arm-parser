@@ -18,6 +18,8 @@ def main():
     parser = ArmParser(Path(src_path), args)
     parser.collect()
     parser.parse()
+
+    parser.to_yaml(Path("aarch64.yaml"))
     #
 
 if __name__ == "__main__":
