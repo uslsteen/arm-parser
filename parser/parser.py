@@ -86,7 +86,7 @@ class ArmParser():
             instr_data.arch_vars = self.parse_arch_variant(iclass)
             
             if instr_data.arch_vars not in self.arch_vars:
-                print() # return
+                return
 
             encoding = iclass.find('regdiagram')
             
