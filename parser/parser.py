@@ -24,6 +24,7 @@ class Instruction:
         self.cond_setting = str()
         self.instr_class = str()
         #
+        self.illegal_vals = dict()
         self.fields = list()
         #
         self.arch_vars = list()
@@ -36,14 +37,15 @@ class Instruction:
         fixed_value = self.mask.replace('x', '0')
         fixed_value = int(fixed_value, 2)
 
-        return dict({                       \
-            "mn" : self.mnemonic,           \
-            "ps_name" : self.ps_name,       \
-            "mask" : self.mask,             \
-            "fixed_mask" : fixed_mask,     \
-            "fixed_value" : fixed_value,    \
-            "fields" : self.fields,         \
-            "attr" : 0                      \
+        return dict({                                \
+            "mn" : self.mnemonic,                    \
+            "ps_name" : self.ps_name,                \
+            "mask" : self.mask,                      \
+            "fixed_mask" : fixed_mask,               \
+            "fixed_value" : fixed_value,             \
+            "illegal_vals" : self.illegal_vals,      \
+            "fields" : self.fields,                  \
+            "attr" : 0                               \
         })
 
 # NOTE: 
@@ -57,7 +59,7 @@ class ArmParser():
         self.xml_list = list()
         #
         self.instr_fields = dict()
-        self.insts_list = list()
+        self.instructions = list()
         #
         self.not_impl_attr = set()
         #
@@ -85,17 +87,16 @@ class ArmParser():
             instr_data = self.parse_instr_section(iclass)
             instr_data.arch_vars = self.parse_arch_variant(iclass)
             
-            if instr_data.arch_vars not in self.arch_vars:
-                return
+            if (instr_data.arch_vars != None) and (instr_data.arch_vars not in self.arch_vars):
+                print() # return
 
             encoding = iclass.find('regdiagram')
-            
+        
             instr_data.ps_name = deslash(encoding.attrib.get('psname'))
-            #
-            instr_data.mask, instr_data.fields = self.parse_bits_section(encoding)
+            instr_data.mask, instr_data.fields, instr_data.illegal_vals = self.parse_bits_section(encoding)
 
             if instr_data.mnemonic != str():
-                self.insts_list.append(instr_data)
+                self.instructions.append(instr_data)
             else:
                 print(f"No mnemonic only {instr_data.ps_name}")
             
@@ -121,9 +122,10 @@ class ArmParser():
     def parse_bits_section(self, encoding):
     #   
         fields, mask = list(), str()
+        illegal_vals = list()
         #
         for box in encoding.findall('box'):
-            illegal_vals = list()
+        #
             field_name = box.attrib.get('name')
             width, msb = int(box.attrib.get('width','1')), int(box.attrib['hibit'])
             lsb = msb - width + 1
@@ -132,21 +134,20 @@ class ArmParser():
                 cur_bits, cond = get_bits(b_it.text, width)
                 
                 if cond == False:
-                    illegal_vals.append(cur_bits)
+                    illegal_vals.append(dict({"msb" : msb, "lsb" : lsb, "value" : cur_bits}))
                     mask += 'x' * width
                 else:
                     mask += cur_bits
             #
             if field_name != None:
-                if illegal_vals != list():
-                    fields.append(dict({"name" : field_name, "illegal_vals" : illegal_vals}))
-                else:
-                    fields.append(dict({"name" : field_name}))
-
+                fields.append(field_name)
+                #
                 if self.instr_fields.get(field_name) == None:
                     self.instr_fields[field_name] = make_fields_data(msb, lsb)
-
-        return mask, fields
+                #
+            #
+        #
+        return mask, fields, illegal_vals
         #
     #
     def parse_arch_variant(self, iclass):
@@ -158,7 +159,8 @@ class ArmParser():
             var = arch_vars[0]
             name, feature = var.attrib.get('name'), var.attrib.get('feature')
             cur_arch_var = dict({"name" : name, "feature" : feature})
-
+            #
+        #
         return cur_arch_var  
         #   
     #
@@ -166,7 +168,7 @@ class ArmParser():
     #
         features_list = list()
         with open(path_to_csv, newline='') as csvfile:
-            spamreader = csv.reader(csvfile, delimiter = ' ')
+            spamreader = csv.reader(csvfile, delimiter = ',')
             for row in spamreader:
                 if len(row) == 2:
                     features_list.append(dict({"name" : row[0], "feature" : row[1]}))
@@ -183,7 +185,7 @@ class ArmParser():
 
         aarch_data = dict()
         aarch_data["fields"] = self.instr_fields
-        aarch_data["instructions"] = list_to_dict(self.insts_list)
+        aarch_data["instructions"] = list_to_dict(self.instructions)
 
         with open(path, 'w+') as file:
             yaml.dump(aarch_data, file)
