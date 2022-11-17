@@ -24,7 +24,7 @@ class Instruction():
         self.cond_setting = str()
         self.instr_class = str()
         #
-        self.illegal_vals = dict()
+        self.illegal_vals = list()
         self.fields = list()
         #
         self.arch_vars = list()
@@ -33,10 +33,10 @@ class Instruction():
         fixed_mask = self.mask.replace('0', '1')
         fixed_mask = fixed_mask.replace('x', '0')
         fixed_mask = int(fixed_mask, 2)
-
+        #
         fixed_value = self.mask.replace('x', '0')
         fixed_value = int(fixed_value, 2)
-
+        #
         return dict({                                \
             "mn" : self.mnemonic,                    \
             "ps_name" : self.ps_name,                \
@@ -70,7 +70,6 @@ class ArmParser():
         self.xml_list = list()
         #
         self.instructions = list()
-        self.inst_id = 0
         #
         self.not_impl_attr = set()
         #
@@ -145,8 +144,9 @@ class ArmParser():
             lsb = msb - width + 1
             #
             for b_it in box:
+            #
                 cur_bits, cond = get_bits(b_it.text, width)
-                
+                #
                 if cond == False:
                     illegal_vals.append(dict({"msb" : msb, "lsb" : lsb, "value" : cur_bits}))
                     mask += 'x' * width
@@ -222,11 +222,6 @@ def ones(n) -> int:
 #
 def get_mask(from_, to_) -> int:
     return ones(from_ - to_ + 1) << from_
-    #
-#
-def make_fields_data(msb, lsb) -> dict:
-    fld_mask = get_mask(msb, lsb)
-    return dict({"bits" : dict({"msb" : msb, "lsb" : lsb}), "mask" : fld_mask, "hex_mask" : hex(fld_mask)})
     #
 #
 def deslash(name : str) -> str:
