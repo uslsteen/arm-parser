@@ -30,7 +30,7 @@ $(foreach T,$(ASLTARGETS), $(eval $(TARGET)))
 GET_DATA: ${A64}
 
 parse:
-	python3 main.py --directory ${A64} --arch_vars $(abspath extensions.csv) > collisions.out
+	python3 main.py --directory ${A64} --arch_vars $(abspath extensions.csv) > log.out
 
 all: GET_DATA parse
 

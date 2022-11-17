@@ -13,7 +13,7 @@ ALL_XML, XML_REGULAR = str('*.xml'),\
                        str('.*/(\S+).xml')
 
 # NOTE: 
-class Instruction:
+class Instruction():
     def __init__(self):
         self.mnemonic = str()
         self.ps_name = str()
@@ -47,7 +47,18 @@ class Instruction:
             "fields" : self.fields,                  \
             "attr" : 0                               \
         })
-
+    #
+#
+#
+class Field():
+    def __init__(self, name : str, msb : int, lsb : int) -> None:
+        self.name = name
+        self.msb = msb
+        self.lsb = lsb
+        self.mask = get_mask(msb, lsb)
+        #
+#
+#
 # NOTE: 
 class ArmParser():
     def __init__(self, path : Path, args):
@@ -58,8 +69,8 @@ class ArmParser():
         #
         self.xml_list = list()
         #
-        self.instr_fields = dict()
         self.instructions = list()
+        self.inst_id = 0
         #
         self.not_impl_attr = set()
         #
@@ -72,7 +83,7 @@ class ArmParser():
             xml = ET.parse(inf)
             #
             self.xml_list.append(xml)
-        #
+            #
     #
     def parse(self):
         for xml in self.xml_list:
@@ -96,7 +107,7 @@ class ArmParser():
             instr_data.mask, instr_data.fields, instr_data.illegal_vals = self.parse_bits_section(encoding)
 
             if instr_data.mnemonic != str():
-                self.instructions.append(instr_data)
+                self.instructions.append(instr_data.__to_dict__())
             else:
                 print(f"No mnemonic only {instr_data.ps_name}")
             
@@ -118,6 +129,7 @@ class ArmParser():
                 self.not_impl_attr.add(attr)
             #
         return instr_data   
+        #
     #
     def parse_bits_section(self, encoding):
     #   
@@ -126,7 +138,9 @@ class ArmParser():
         #
         for box in encoding.findall('box'):
         #
-            field_name = box.attrib.get('name')
+            field_name, is_usename = box.attrib.get('name'), box.attrib.get('usename')
+            is_usename = True if is_usename == '1' else False
+            
             width, msb = int(box.attrib.get('width','1')), int(box.attrib['hibit'])
             lsb = msb - width + 1
             #
@@ -139,20 +153,17 @@ class ArmParser():
                 else:
                     mask += cur_bits
             #
-            if field_name != None:
-                fields.append(field_name)
+            if field_name != None and is_usename:
+                field = Field(field_name, msb, lsb)
+                fields.append(field.__dict__)
                 #
-                if self.instr_fields.get(field_name) == None:
-                    self.instr_fields[field_name] = make_fields_data(msb, lsb)
-                #
-            #
         #
         return mask, fields, illegal_vals
         #
     #
     def parse_arch_variant(self, iclass):
     #
-        cur_arch_var = dict()
+        cur_arch_var = None
         arch_vars = iclass.find("arch_variants")
         #
         if arch_vars != None:
@@ -184,22 +195,12 @@ class ArmParser():
         yaml.indent = 4
 
         aarch_data = dict()
-        aarch_data["fields"] = self.instr_fields
-        aarch_data["instructions"] = list_to_dict(self.instructions)
+        aarch_data["instructions"] = self.instructions
 
         with open(path, 'w+') as file:
             yaml.dump(aarch_data, file)
         #
     #
-#
-def list_to_dict(list) -> dict:
-    cur_dict = dict()
-    #
-    for ind, it in enumerate(list):
-        cur_dict[ind] = it.__to_dict__()
-    #
-    return cur_dict
-
 #
 def get_bits(bit_data : str, width):
     #
