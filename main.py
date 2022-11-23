@@ -1,5 +1,5 @@
 from pathlib import Path
-from parser.parser import ArmParser
+from parser.parser import Parser
 import argparse
 
 def main():
@@ -15,7 +15,7 @@ def main():
     exec_path = Path.resolve(Path(__file__)).parent
     src_path = exec_path.joinpath(args.directory)
     #
-    parser = ArmParser(Path(src_path), args)
+    parser = Parser(Path(src_path), args)
     parser.collect()
     parser.parse()
 

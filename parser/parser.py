@@ -30,6 +30,7 @@ class Instruction():
         self.arch_vars = list()
     #
     def __to_dict__(self):
+    #
         fixed_mask = self.mask.replace('0', '1')
         fixed_mask = fixed_mask.replace('x', '0')
         fixed_mask = int(fixed_mask, 2)
@@ -40,6 +41,8 @@ class Instruction():
         return dict({                                \
             "mn" : self.mnemonic,                    \
             "ps_name" : self.ps_name,                \
+            "instr_class" : self.instr_class,        \
+            # "cond_setting" : self.cond_setting,    \
             "mask" : self.mask,                      \
             "fixed_mask" : fixed_mask,               \
             "fixed_value" : fixed_value,             \
@@ -55,12 +58,12 @@ class Field():
         self.name = name
         self.msb = msb
         self.lsb = lsb
-        self.mask = get_mask(msb, lsb)
-        #
+        # self.mask = get_mask(msb, lsb)
+    #
 #
 #
 # NOTE: 
-class ArmParser():
+class Parser():
     def __init__(self, path : Path, args):
     #
         self.path = path
@@ -68,7 +71,6 @@ class ArmParser():
         self.arch_vars = self.parse_extensions_csv(args.arch_vars)
         #
         self.xml_list = list()
-        #
         self.instructions = list()
         #
         self.not_impl_attr = set()
@@ -90,52 +92,73 @@ class ArmParser():
         #
     #
     def parse_inst(self, xml):
-        encs = list()
+    #
+        root = xml.getroot()
+        instr_section = self.parse_instr_section(root.attrib)
+        #
+        if instr_section["is_instr"] == False:
+            return
 
         for iclass in xml.findall('.//classes/iclass'):
-            #
-            instr_data = self.parse_instr_section(iclass)
-            instr_data.arch_vars = self.parse_arch_variant(iclass)
-            
-            if (instr_data.arch_vars != None) and (instr_data.arch_vars not in self.arch_vars):
-                print() # return
-
-            encoding = iclass.find('regdiagram')
-        
-            instr_data.ps_name = deslash(encoding.attrib.get('psname'))
-            instr_data.mask, instr_data.fields, instr_data.illegal_vals = self.parse_bits_section(encoding)
-
-            if instr_data.mnemonic != str():
-                self.instructions.append(instr_data.__to_dict__())
-            else:
-                print(f"No mnemonic only {instr_data.ps_name}")
-            
-            encs.append(instr_data)
-            #
+            instr_data =  self.parse_instr_class(iclass)
+            #   
+            if instr_data != None:
+                if instr_data.mnemonic != str():
+                    self.instructions.append(instr_data.__to_dict__())
+                else:
+                    print(f"No mnemonic only {instr_data.ps_name}")
+        #
     #
-    def parse_instr_section(self, iclass) -> Instruction:
+    def parse_instr_section(self, instr_section):
+        id, title = instr_section.get("id"), instr_section.get("title")
+        is_instr = True if instr_section.get("type") == "instruction" \
+                        else False
+
+        return dict({"id" : id, "title" : title, "is_instr" : is_instr})
+        #
+    #
+    def parse_instr_class(self, iclass) -> Instruction:
     #
         instr_data = Instruction()
+        self.parse_class_attrs(iclass.find("docvars"), instr_data)
+        arch_vars = self.parse_arch_variant(iclass)
 
-        docvars = iclass.find("docvars")
-        for doc_var in docvars:
-            attr = str(doc_var.get("key"))
-            attr = attr.replace("-", "_")
-            #
-            if hasattr(instr_data, attr):
-                setattr(instr_data, attr, doc_var.get("value"))
-            else:
-                self.not_impl_attr.add(attr)
-            #
+        if (arch_vars != None) and (arch_vars not in self.arch_vars):
+            print() # return None
+        
+        self.parse_regdiagram(iclass.find('regdiagram'), instr_data)
+        self.parse_encoding(iclass.find('encoding'), instr_data)
+        #
         return instr_data   
         #
     #
-    def parse_bits_section(self, encoding):
-    #   
-        fields, mask = list(), str()
-        illegal_vals = list()
+    def parse_class_attrs(self, attrs, instr_data : Instruction):
+    #
+        for instr_attr in attrs:
+            attr = str(instr_attr.get("key"))
+            attr = attr.replace("-", "_")
+            #
+            if hasattr(instr_data, attr):
+                setattr(instr_data, attr, instr_attr.get("value"))
+            else:
+                self.not_impl_attr.add(attr)
+            #
         #
-        for box in encoding.findall('box'):
+    #
+    def parse_regdiagram(self, regdiagram, instr_data : Instruction):
+    #
+        instr_data.ps_name = deslash(regdiagram.attrib.get('psname'))
+        self.parse_bits_box(regdiagram, instr_data)
+        #
+    #
+    # NOTE: will be implemented in next version
+    def parse_encoding(self, encoding, instr_data : Instruction):
+        pass
+        #
+    #
+    def parse_bits_box(self, regdiagram, instr_data : Instruction):
+    #   
+        for box in regdiagram.findall('box'):
         #
             field_name, is_usename = box.attrib.get('name'), box.attrib.get('usename')
             is_usename = True if is_usename == '1' else False
@@ -148,17 +171,15 @@ class ArmParser():
                 cur_bits, cond = get_bits(b_it.text, width)
                 #
                 if cond == False:
-                    illegal_vals.append(dict({"msb" : msb, "lsb" : lsb, "value" : cur_bits}))
-                    mask += 'x' * width
+                    instr_data.illegal_vals.append(dict({"msb" : msb, "lsb" : lsb, "value" : cur_bits}))
+                    instr_data.mask += 'x' * width
                 else:
-                    mask += cur_bits
+                    instr_data.mask += cur_bits
             #
             if field_name != None and is_usename:
                 field = Field(field_name, msb, lsb)
-                fields.append(field.__dict__)
+                instr_data.fields.append(field.__dict__)
                 #
-        #
-        return mask, fields, illegal_vals
         #
     #
     def parse_arch_variant(self, iclass):
