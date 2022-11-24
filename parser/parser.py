@@ -58,12 +58,11 @@ class Field():
         self.name = name
         self.msb = msb
         self.lsb = lsb
-        # self.mask = get_mask(msb, lsb)
     #
 #
 #
 # NOTE: 
-class Parser():
+class ArmParser():
     def __init__(self, path : Path, args):
     #
         self.path = path
@@ -103,11 +102,12 @@ class Parser():
             instr_data =  self.parse_instr_class(iclass)
             #   
             if instr_data != None:
-                if instr_data.mnemonic != str():
-                    self.instructions.append(instr_data.__to_dict__())
-                else:
-                    print(f"No mnemonic only {instr_data.ps_name}")
-        #
+                if instr_data.mnemonic == str():
+                    # print(f"No mnemonic, only {instr_data.ps_name}")
+                    instr_data.mnemonic = instr_section['id']
+                #
+                self.instructions.append(instr_data.__to_dict__()) 
+            #
     #
     def parse_instr_section(self, instr_section):
         id, title = instr_section.get("id"), instr_section.get("title")
