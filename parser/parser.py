@@ -28,6 +28,7 @@ class Instruction():
         self.fields = list()
         #
         self.arch_vars = list()
+        self.encs = list()
     #
     def __to_dict__(self):
     #
@@ -42,16 +43,30 @@ class Instruction():
             "mn" : self.mnemonic,                    \
             "ps_name" : self.ps_name,                \
             "instr_class" : self.instr_class,        \
-            # "cond_setting" : self.cond_setting,    \
             "mask" : self.mask,                      \
             "fixed_mask" : fixed_mask,               \
             "fixed_value" : fixed_value,             \
             "illegal_vals" : self.illegal_vals,      \
             "fields" : self.fields,                  \
-            "attr" : 0                               \
+            "encodings" : self.encs                  \
         })
     #
 #
+class Operand():
+    def __init__(self, name : str, descr : str):
+        self.name = name
+        self.descr = descr
+    #
+#
+class Encoding():
+    def __init__(self, conds : list, asm_str, operands : list):
+        self.conds = conds
+        self.asm_str = asm_str
+        self.ops = list()
+        #
+        for op in operands:
+            self.ops.append(op.__dict__)
+    #
 #
 class Field():
     def __init__(self, name : str, msb : int, lsb : int) -> None:
@@ -59,7 +74,6 @@ class Field():
         self.msb = msb
         self.lsb = lsb
     #
-#
 #
 # NOTE: 
 class ArmParser():
@@ -121,13 +135,19 @@ class ArmParser():
     #
         instr_data = Instruction()
         self.parse_class_attrs(iclass.find("docvars"), instr_data)
+        #
         arch_vars = self.parse_arch_variant(iclass)
 
+        if instr_data.mnemonic == "SDIVR":
+            print()
+
         if (arch_vars != None) and (arch_vars not in self.arch_vars):
-            print() # return None
-        
+            print() # return
+        #
         self.parse_regdiagram(iclass.find('regdiagram'), instr_data)
-        self.parse_encoding(iclass.find('encoding'), instr_data)
+        #
+        for enc in iclass.findall('encoding'):
+            self.parse_encoding(enc, instr_data)
         #
         return instr_data   
         #
@@ -151,9 +171,25 @@ class ArmParser():
         self.parse_bits_box(regdiagram, instr_data)
         #
     #
-    # NOTE: will be implemented in next version
     def parse_encoding(self, encoding, instr_data : Instruction):
-        pass
+        bitdiffs = encoding.attrib.get("bitdiffs")
+        # 
+        asm_str, operands = self.parse_asm_template(encoding.find("asmtemplate"))
+        instr_data.encs.append(Encoding(bitdiffs , asm_str, operands).__dict__)
+        #
+    #
+    def parse_asm_template(self, asm_template):
+    #
+        asm_str, operands = str(), list()
+        #
+        for it in asm_template:
+            asm_str += it.text
+            hover = it.attrib.get("hover")
+
+            if hover != str() and hover != None:
+                operands.append(Operand(it.text, hover))
+        #
+        return asm_str, operands
         #
     #
     def parse_bits_box(self, regdiagram, instr_data : Instruction):
@@ -243,10 +279,13 @@ def ones(n) -> int:
 #
 def get_mask(from_, to_) -> int:
     return ones(from_ - to_ + 1) << from_
-    #
+    # 
 #
 def deslash(name : str) -> str:
-    return name.replace("/instrs","").replace("/", "_").replace("-","_")
+    return name.replace("/instrs","").replace("/", "__").replace("-","_")
     #
 #
-        
+def is_comma(text : str) -> bool:
+    return ',' in text
+    #
+#
