@@ -88,6 +88,9 @@ class ArmParser():
         #
         self.not_impl_attr = set()
         #
+        self.OR, self.AND = " || ", " && "
+        self.EQ, self.NOT_EQ = " == ", " != " 
+        #
     #
     def collect(self):
         for inf in glob.glob(os.path.join(self.path, ALL_XML)):
@@ -138,9 +141,6 @@ class ArmParser():
         #
         arch_vars = self.parse_arch_variant(iclass)
 
-        if instr_data.mnemonic == "SDIVR":
-            print()
-
         if (arch_vars != None) and (arch_vars not in self.arch_vars):
             print() # return
         #
@@ -173,9 +173,13 @@ class ArmParser():
     #
     def parse_encoding(self, encoding, instr_data : Instruction):
         bitdiffs = encoding.attrib.get("bitdiffs")
-        # 
+        conds = list()
+        #
+        if bitdiffs != None:
+            conds = self.parse_cond(bitdiffs) 
+        #
         asm_str, operands = self.parse_asm_template(encoding.find("asmtemplate"))
-        instr_data.encs.append(Encoding(bitdiffs , asm_str, operands).__dict__)
+        instr_data.encs.append(Encoding(conds , asm_str, operands).__dict__)
         #
     #
     def parse_asm_template(self, asm_template):
@@ -190,6 +194,40 @@ class ArmParser():
                 operands.append(Operand(it.text, hover))
         #
         return asm_str, operands
+        #
+    #
+    def parse_cond(self, cond : str):
+        enc_cond = dict()
+        #
+        for it in cond.split(self.AND):
+            cur_op = str()
+            for op in list([self.EQ, self.NOT_EQ]):
+                if it.find(op) != -1:
+                    cur_op = op
+            #
+            (name, val) = it.split(cur_op)
+            vals = list()
+            #
+            if 'x' not in val:
+                if cur_op == self.NOT_EQ:
+                    vals = not_equal(val)
+                else:
+                    vals = equal(val)
+            else:
+                vals = get_legal_vals(val)
+            #
+            enc_cond[name] = dict({"vals" : vals})
+        #
+        return enc_cond
+        #
+    #
+    def parse_conds(self, conds : str):
+        enc_conds = list()
+        #
+        for cond in conds.split(self.OR):
+            enc_conds.append(self.parse_cond(cond))
+        #
+        return enc_conds
         #
     #
     def parse_bits_box(self, regdiagram, instr_data : Instruction):
@@ -215,7 +253,6 @@ class ArmParser():
             if field_name != None and is_usename:
                 field = Field(field_name, msb, lsb)
                 instr_data.fields.append(field.__dict__)
-                #
         #
     #
     def parse_arch_variant(self, iclass):
@@ -289,3 +326,43 @@ def is_comma(text : str) -> bool:
     return ',' in text
     #
 #
+def not_equal(val : str) -> list:
+    not_eq = list()
+    width = len(val)
+    val = int(val, 2)
+    #
+    for cur_val in range(ones(width)):
+        not_eq.append(cur_val)
+    return not_eq
+    #
+#
+def equal(val : str) -> list:
+    vals = list()
+    #
+    if '(' and ')' in val:
+        vals.append(val[1:-1])
+    else:
+        vals.append(val)
+    return vals
+    #
+#
+def replace_bit(val : str, bit_num : int, bit_value : int) -> str:
+    return val[:bit_num] + str(bit_value) + val[bit_num + 1:]
+    #
+#
+def get_legal_vals(val : str) -> list:
+    legal_vals = list()
+    x_pos = val.find('x')
+    #
+    if x_pos != -1:
+        val0, val1 =  replace_bit(val, x_pos, 0),\
+                      replace_bit(val, x_pos, 1)
+        
+        legal_vals += get_legal_vals(val0)
+        legal_vals += get_legal_vals(val1)
+    #
+    else:
+        legal_vals.append(val)
+    #
+    return legal_vals
+    
