@@ -6,6 +6,7 @@ import re
 import csv
 import xml.etree.cElementTree as ET
 from collections import defaultdict
+from typing import Any
 
 from ruamel.yaml import YAML
 
@@ -22,6 +23,7 @@ class Instruction():
         self.isa = str()
         #
         self.cond_setting = str()
+        self.upd_nzcv = False
         self.instr_class = str()
         #
         self.illegal_vals = list()
@@ -29,6 +31,16 @@ class Instruction():
         #
         self.arch_vars = list()
         self.encs = list()
+        #
+    # def __setattr__(self, __name: str, __value : Any) -> None:
+    #     # setattr(instr_data, attr, instr_attr.get("value"))
+    #     if __name == "cond_setting":
+    #         if __value not in ['s', 'S']:
+    #             return
+    #         else:
+    #             __value = True
+    #     #
+    #     setattr(self, __name, __value)
     #
     def __to_dict__(self):
     #
@@ -39,17 +51,35 @@ class Instruction():
         fixed_value = self.mask.replace('x', '0')
         fixed_value = int(fixed_value, 2)
         #
-        return dict({                                \
-            "mn" : self.mnemonic,                    \
-            "ps_name" : self.ps_name,                \
-            "instr_class" : self.instr_class,        \
-            "mask" : self.mask,                      \
-            "fixed_mask" : fixed_mask,               \
-            "fixed_value" : fixed_value,             \
-            "illegal_vals" : self.illegal_vals,      \
-            "fields" : self.fields,                  \
-            "encodings" : self.encs                  \
-        })
+        if self.upd_nzcv == False:
+            return dict({                                \
+                "mn" : self.mnemonic,                    \
+                "ps_name" : self.ps_name,                \
+            # NOTE: instr_class <=> ps_name
+            #    "instr_class" : self.instr_class,        \
+                "mask" : self.mask,                      \
+                "fixed_mask" : fixed_mask,               \
+                "fixed_value" : fixed_value,             \
+                "illegal_vals" : self.illegal_vals,      \
+                "fields" : self.fields,                  \
+                "encodings" : self.encs                  \
+            })
+        else:
+            return dict({                                \
+                "mn" : self.mnemonic,                    \
+                "ps_name" : self.ps_name,                \
+            # NOTE: instr_class <=> ps_name
+            #    "instr_class" : self.instr_class,        \
+                "upd_NZCVflags" : self.upd_nzcv,         \
+                "mask" : self.mask,                      \
+                "fixed_mask" : fixed_mask,               \
+                "fixed_value" : fixed_value,             \
+                "illegal_vals" : self.illegal_vals,      \
+                "fields" : self.fields,                  \
+                "encodings" : self.encs                  \
+            })
+            
+
     #
 #
 class Operand():
@@ -159,7 +189,15 @@ class ArmParser():
             attr = attr.replace("-", "_")
             #
             if hasattr(instr_data, attr):
-                setattr(instr_data, attr, instr_attr.get("value"))
+                value = instr_attr.get("value")
+                if attr == "cond_setting":
+                    if value not in ['s', 'S']:
+                        continue
+                    else:
+                        attr = "upd_nzcv"
+                        value = True
+                #
+                setattr(instr_data, attr, value)
             else:
                 self.not_impl_attr.add(attr)
             #
@@ -305,7 +343,14 @@ def get_bits(bit_data : str, width):
     elif bit_data == '(0)':
         return '0', True
     elif bit_data != None and bit_data[0:2] == "!=":
-        return bit_data[3:], False
+        field_val, vals = bit_data[3:], list()
+        #
+        if 'x' in field_val:
+            vals = get_legal_vals(field_val)
+        else:
+            vals = list([field_val])
+        #
+        return vals, False
     else:
         return 'x' * width, True  
     #
