@@ -12,15 +12,16 @@ from ruamel.yaml import YAML
 
 ALL_XML, XML_REGULAR = str('*.xml'),\
                        str('.*/(\S+).xml')
-
-# NOTE: 
+#
+# NOTE:
 class Instruction():
     def __init__(self):
         self.mnemonic = str()
         self.ps_name = str()
         #
         self.mask = str()
-        self.isa = str()
+        self.fixed_mask = 0
+        self.fixed_value = 0
         #
         self.cond_setting = str()
         self.upd_nzcv = False
@@ -32,54 +33,46 @@ class Instruction():
         self.arch_vars = list()
         self.encs = list()
         #
-    # def __setattr__(self, __name: str, __value : Any) -> None:
-    #     # setattr(instr_data, attr, instr_attr.get("value"))
-    #     if __name == "cond_setting":
-    #         if __value not in ['s', 'S']:
-    #             return
-    #         else:
-    #             __value = True
-    #     #
-    #     setattr(self, __name, __value)
+    #
+    def set(self, __name: str, __value : Any) -> None:
+    #
+        if __name == "cond_setting":
+        #
+            if __value not in ['s', 'S']:
+                return
+            else:
+                __name = "upd_nzcv"
+                __value = True
+        #
+        elif __name == "mask":
+        #
+            self.fixed_mask = __value.replace('0', '1')
+            self.fixed_mask = self.fixed_mask.replace('x', '0')
+            self.fixed_mask = int(self.fixed_mask, 2)
+            #
+            self.fixed_value = __value.replace('x', '0')
+            self.fixed_value = int(self.fixed_value, 2)
+        #
+        self.__dict__[__name] = __value
+        #
     #
     def __to_dict__(self):
     #
-        fixed_mask = self.mask.replace('0', '1')
-        fixed_mask = fixed_mask.replace('x', '0')
-        fixed_mask = int(fixed_mask, 2)
+        __dict = dict()
         #
-        fixed_value = self.mask.replace('x', '0')
-        fixed_value = int(fixed_value, 2)
+        for (key, value) in self.__dict__.items():
+            if key in ["cond_setting", "arch_vars"]:
+                continue
+            #
+            elif key in "upd_nzcv" and value == False:
+                continue
+            #
+            elif key in "illegal_vals" and value == list():
+                continue   
+            #
+            __dict[key] = value
         #
-        if self.upd_nzcv == False:
-            return dict({                                \
-                "mn" : self.mnemonic,                    \
-                "ps_name" : self.ps_name,                \
-            # NOTE: instr_class <=> ps_name
-            #    "instr_class" : self.instr_class,        \
-                "mask" : self.mask,                      \
-                "fixed_mask" : fixed_mask,               \
-                "fixed_value" : fixed_value,             \
-                "illegal_vals" : self.illegal_vals,      \
-                "fields" : self.fields,                  \
-                "encodings" : self.encs                  \
-            })
-        else:
-            return dict({                                \
-                "mn" : self.mnemonic,                    \
-                "ps_name" : self.ps_name,                \
-            # NOTE: instr_class <=> ps_name
-            #    "instr_class" : self.instr_class,        \
-                "upd_NZCVflags" : self.upd_nzcv,         \
-                "mask" : self.mask,                      \
-                "fixed_mask" : fixed_mask,               \
-                "fixed_value" : fixed_value,             \
-                "illegal_vals" : self.illegal_vals,      \
-                "fields" : self.fields,                  \
-                "encodings" : self.encs                  \
-            })
-            
-
+        return __dict
     #
 #
 class Operand():
@@ -105,7 +98,7 @@ class Field():
         self.lsb = lsb
     #
 #
-# NOTE: 
+# NOTE:
 class ArmParser():
     def __init__(self, path : Path, args):
     #
@@ -119,11 +112,11 @@ class ArmParser():
         self.not_impl_attr = set()
         #
         self.OR, self.AND = " || ", " && "
-        self.EQ, self.NOT_EQ = " == ", " != " 
+        self.EQ, self.NOT_EQ = " == ", " != "
         #
     #
     def collect(self):
-        for inf in glob.glob(os.path.join(self.path, ALL_XML)):
+        for inf in sorted(glob.glob(os.path.join(self.path, ALL_XML))):
             name = re.search(XML_REGULAR, inf).group(1)
             #
             if name == "onebigfile": continue
@@ -179,7 +172,7 @@ class ArmParser():
         for enc in iclass.findall('encoding'):
             self.parse_encoding(enc, instr_data)
         #
-        return instr_data   
+        return instr_data
         #
     #
     def parse_class_attrs(self, attrs, instr_data : Instruction):
@@ -190,14 +183,7 @@ class ArmParser():
             #
             if hasattr(instr_data, attr):
                 value = instr_attr.get("value")
-                if attr == "cond_setting":
-                    if value not in ['s', 'S']:
-                        continue
-                    else:
-                        attr = "upd_nzcv"
-                        value = True
-                #
-                setattr(instr_data, attr, value)
+                instr_data.set(attr, value)
             else:
                 self.not_impl_attr.add(attr)
             #
@@ -214,7 +200,7 @@ class ArmParser():
         conds = list()
         #
         if bitdiffs != None:
-            conds = self.parse_cond(bitdiffs) 
+            conds = self.parse_cond(bitdiffs)
         #
         asm_str, operands = self.parse_asm_template(encoding.find("asmtemplate"))
         instr_data.encs.append(Encoding(conds , asm_str, operands).__dict__)
@@ -270,6 +256,8 @@ class ArmParser():
     #
     def parse_bits_box(self, regdiagram, instr_data : Instruction):
     #   
+        mask = str()
+        #
         for box in regdiagram.findall('box'):
         #
             field_name, is_usename = box.attrib.get('name'), box.attrib.get('usename')
@@ -279,18 +267,19 @@ class ArmParser():
             lsb = msb - width + 1
             #
             for b_it in box:
-            #
                 cur_bits, cond = get_bits(b_it.text, width)
                 #
                 if cond == False:
                     instr_data.illegal_vals.append(dict({"msb" : msb, "lsb" : lsb, "value" : cur_bits}))
-                    instr_data.mask += 'x' * width
+                    mask += 'x' * width
                 else:
-                    instr_data.mask += cur_bits
+                    mask += cur_bits
             #
             if field_name != None and is_usename:
                 field = Field(field_name, msb, lsb)
                 instr_data.fields.append(field.__dict__)
+        #
+        instr_data.set("mask", mask)
         #
     #
     def parse_arch_variant(self, iclass):
@@ -304,8 +293,8 @@ class ArmParser():
             cur_arch_var = dict({"name" : name, "feature" : feature})
             #
         #
-        return cur_arch_var  
-        #   
+        return cur_arch_var
+        #
     #
     def parse_extensions_csv(self, path_to_csv : str):
     #
@@ -345,14 +334,14 @@ def get_bits(bit_data : str, width):
     elif bit_data != None and bit_data[0:2] == "!=":
         field_val, vals = bit_data[3:], list()
         #
-        if 'x' in field_val:
+        if "x" in field_val:
             vals = get_legal_vals(field_val)
         else:
-            vals = list([field_val])
+            vals = list([int(field_val, 2)])
         #
         return vals, False
     else:
-        return 'x' * width, True  
+        return 'x' * width, True
     #
 #      
 def ones(n) -> int:
@@ -361,10 +350,10 @@ def ones(n) -> int:
 #
 def get_mask(from_, to_) -> int:
     return ones(from_ - to_ + 1) << from_
-    # 
+    #
 #
 def deslash(name : str) -> str:
-    return name.replace("/instrs","").replace("/", "__").replace("-","_")
+    return name.replace("/instrs","").replace("/", "__").replace("-","__")
     #
 #
 def is_comma(text : str) -> bool:
@@ -385,9 +374,9 @@ def equal(val : str) -> list:
     vals = list()
     #
     if '(' and ')' in val:
-        vals.append(val[1:-1])
+        vals.append(int(val[1:-1], 2))
     else:
-        vals.append(val)
+        vals.append(int(val, 2))
     return vals
     #
 #
@@ -400,14 +389,15 @@ def get_legal_vals(val : str) -> list:
     x_pos = val.find('x')
     #
     if x_pos != -1:
-        val0, val1 =  replace_bit(val, x_pos, 0),\
-                      replace_bit(val, x_pos, 1)
+        val0, val1 = replace_bit(val, x_pos, 0),\
+                     replace_bit(val, x_pos, 1)
         
         legal_vals += get_legal_vals(val0)
         legal_vals += get_legal_vals(val1)
     #
     else:
-        legal_vals.append(val)
+        legal_vals.append(int(val, 2))
     #
     return legal_vals
-    
+    #
+#
