@@ -339,7 +339,7 @@ def get_bits(bit_data : str, width):
         if "x" in field_val:
             vals = get_legal_vals(field_val)
         else:
-            vals = list([int(field_val, 2)])
+            vals = list([int(field_val)])
         #
         return vals, False
     else:
