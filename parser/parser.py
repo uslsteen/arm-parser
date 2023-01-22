@@ -31,7 +31,7 @@ class Instruction():
         self.fields = list()
         #
         self.arch_vars = list()
-        self.encs = list()
+        self.encodings = list()
         #
     #
     def set(self, __name: str, __value : Any) -> None:
@@ -61,14 +61,16 @@ class Instruction():
         __dict = dict()
         #
         for (key, value) in self.__dict__.items():
-            if key in ["cond_setting", "arch_vars"]:
+            if key in ["cond_setting", "arch_vars", "instr_class"]:
                 continue
             #
             elif key in "upd_nzcv" and value == False:
                 continue
             #
             elif key in "illegal_vals" and value == list():
-                continue   
+                continue
+            #
+            elif key in "mnemonic": key = "mn"
             #
             __dict[key] = value
         #
@@ -203,7 +205,7 @@ class ArmParser():
             conds = self.parse_cond(bitdiffs)
         #
         asm_str, operands = self.parse_asm_template(encoding.find("asmtemplate"))
-        instr_data.encs.append(Encoding(conds , asm_str, operands).__dict__)
+        instr_data.encodings.append(Encoding(conds , asm_str, operands).__dict__)
         #
     #
     def parse_asm_template(self, asm_template):
